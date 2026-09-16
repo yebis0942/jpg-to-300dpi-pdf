@@ -30,7 +30,13 @@ export async function loadCore() {
     throw new Error(`core に DOM 参照が混入しています: ${leaked.join(', ')}`);
   }
 
-  const fn = new Function(`${m[1]}\nreturn { ${EXPORTS.join(', ')} };`);
+  // スタックトレースが index.html の実際の行番号を指すように行を詰める。
+  // new Function は本体を `function anonymous(\n) {\n` で包むので、開始タグの
+  // 行番号から 3 行ぶん差し引く。ずれたら extract.test.mjs が教えてくれる。
+  const tagLine = html.slice(0, html.indexOf('<script id="core">')).split('\n').length;
+  const src = '\n'.repeat(Math.max(0, tagLine - 3)) + m[1] + '\n//# sourceURL=index.html';
+
+  const fn = new Function(`${src}\nreturn { ${EXPORTS.join(', ')} };`);
   return fn();
 }
 
