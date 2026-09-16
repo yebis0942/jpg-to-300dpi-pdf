@@ -303,6 +303,10 @@
 
         // SOF0 〜 SOF15 (SOF4, 8, 12 除く)
         if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
+          // 宣言長の検証を本体読み取りより先に行う（次セグメントへの食い込み防止）
+          if (len < 8) {
+            throw new JpegError('CORRUPT', `SOFセグメント長が不正です (len: ${len})`);
+          }
           await ensure(segStart + 6);
           if (m >= 0xC9) throw new JpegError('UNSUPPORTED', '算術符号化 JPEG は非対応です');
           if (m === 0xC3 || m === 0xC7) throw new JpegError('UNSUPPORTED', 'ロスレス JPEG は非対応です');
@@ -314,6 +318,9 @@
           info.components = buf[segStart + 5];
           info.progressive = (m === 0xC2);
 
+          if (len < 8 + 3 * info.components) {
+            throw new JpegError('CORRUPT', `SOFセグメント長が成分数と一致しません (len: ${len}, 成分数: ${info.components})`);
+          }
           if (info.precision !== 8) {
             throw new JpegError('UNSUPPORTED', `${info.precision}bit JPEG は非対応です（8bit のみ対応）`);
           }
@@ -327,7 +334,7 @@
         }
 
         // APP1 (EXIF)
-        if (m === 0xE1 && !exifSeen) {
+        if (m === 0xE1 && !exifSeen && len >= 8) { // 識別子 6 バイトを読むため
           await ensure(segEnd);
           if (ascii(buf, segStart, 6) === 'Exif\0\0') {
             exifSeen = true;
@@ -337,7 +344,7 @@
               info.warnings.push({ code: 'EXIF_INVALID', message: `EXIF回転情報が解析できませんでした（通常向きで処理）: ${e.message}` });
             }
           }
-        } else if (m === 0xEE) { // APP14 (Adobe)
+        } else if (m === 0xEE && len >= 7) { // APP14 (Adobe)。識別子 5 バイトを読むため
           await ensure(segStart + 5);
           if (ascii(buf, segStart, 5) === 'Adobe') {
             info.adobe = true;
