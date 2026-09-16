@@ -177,6 +177,20 @@
       color: var(--danger);
     }
 
+    .card-download {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .card-download:hover, .card-download:focus-visible {
+      color: var(--primary-hover);
+      text-decoration: underline;
+    }
+
     .clear-btn {
       background: none;
       border: none;
@@ -483,6 +497,9 @@
     const resultList = document.getElementById('resultList');
     const clearBtn = document.getElementById('clearBtn');
 
+    // 「1 カード = 1 Object URL」。カードの生存期間と URL の生存期間を一致させる
+    const liveObjectUrls = [];
+
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -505,6 +522,12 @@
     });
 
     clearBtn.addEventListener('click', () => {
+      // Object URL の解放点はここ 1 箇所のみ。
+      // pagehide / beforeunload では revoke しない: Blob URL store は document に
+      // 紐づき破棄時に自動解放されるうえ、pagehide で revoke すると bfcache 復帰時に
+      // カードだけ残ってリンクが死ぬ。
+      for (const url of liveObjectUrls) URL.revokeObjectURL(url);
+      liveObjectUrls.length = 0;
       resultList.replaceChildren();
       resultsSection.style.display = 'none';
     });
@@ -548,16 +571,15 @@
           // 2. 300 DPI PDF 生成 (ゼロコピー)
           const pdfBlob = buildPdf(file, info);
 
-          // 3. ダウンロード発火
+          // 3. ダウンロードリンクを生成（カードに常設し、これ自身を click して自動 DL）
           const url = URL.createObjectURL(pdfBlob);
-          const a = document.createElement('a');
-          a.href = url;
-          const outName = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
-          a.download = outName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          liveObjectUrls.push(url);
+          const link = document.createElement('a');
+          link.className = 'card-download';
+          link.href = url;
+          // download は DOM プロパティなのでファイル名のエスケープは不要
+          link.download = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
+          link.textContent = '⬇ ダウンロード';
 
           // 4. UI 表示更新
           const { pageW, pageH } = layout(info);
@@ -572,7 +594,7 @@
           meta.textContent =
             `${info.width}×${info.height}px → ${ptW}×${ptH}pt (${mmW}×${mmH}mm) | 300 DPI | ${(pdfBlob.size / 1024).toFixed(1)} KB`;
 
-          // 警告は 1 件につき 1 要素。innerHTML を使わず textContent で描画する
+          // 警告は 1 件につき 1 要素。DL リンクより前に置き、リンクを常にカード末尾にする
           for (const w of info.warnings) {
             const msgEl = document.createElement('div');
             msgEl.className = 'card-message';
@@ -580,6 +602,11 @@
             msgEl.textContent = w.message;
             body.appendChild(msgEl);
           }
+
+          body.appendChild(link);
+
+          // 5. ダウンロード発火。ブラウザにブロックされてもリンクはカードに残る
+          link.click();
         } catch (err) {
           card.className = 'result-card error';
           icon.textContent = '✕';
