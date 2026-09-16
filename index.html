@@ -245,7 +245,7 @@
     </div>
   </div>
 
-  <script>
+  <script id="core">
     // --- 1. JPEG エラークラスとファイル種別スニッフィング ---
     class JpegError extends Error {
       constructor(code, message) {
@@ -511,6 +511,9 @@
       return new Blob([part1, file, latin1(tail)], { type: 'application/pdf' });
     }
 
+  </script>
+
+  <script id="ui">
     // --- 5. UI イベント制御 ---
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
