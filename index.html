@@ -335,6 +335,11 @@
           if (info.progressive) {
             info.warnings.push({ code: 'PROGRESSIVE', message: 'プログレッシブ JPEG です。PDF の DCTDecode はベースライン前提のため、Acrobat など一部のビューアで表示されない場合があります（変換は続行します）' });
           }
+          // PDF のページ上限 14400pt = 60000px（300 DPI 換算）
+          const longSide = Math.max(info.width, info.height);
+          if (longSide * 24 / 100 > 14400) {
+            info.warnings.push({ code: 'PAGE_TOO_LARGE', message: `ページの長辺が ${fmt(longSide)}pt となり、PDF の上限 14400pt を超えます（一部のビューアで開けない場合があります）` });
+          }
           break; // SOF取得完了、ヘッダ走査終了
         }
 
