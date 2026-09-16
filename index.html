@@ -412,8 +412,10 @@
     // px * 0.24 = px * 24 / 100 で丸め誤差を防止
     const fmt = (px) => (px * 24 / 100).toFixed(2).replace(/\.?0+$/, '') || '0';
 
-    function layout({ width: W, height: H, orientation: o }) {
-      const M = {
+    function layout({ width: W, height: H, orientation }) {
+      // 1〜8 以外（欠損・範囲外・非整数）はここで 1 に正規化し、cm と swap の両方をこの o から導く
+      const o = (Number.isInteger(orientation) && orientation >= 1 && orientation <= 8) ? orientation : 1;
+      const cm = {
         1: [ W,  0,  0,  H, 0, 0],
         2: [-W,  0,  0,  H, W, 0],
         3: [-W,  0,  0, -H, W, H],
@@ -422,13 +424,13 @@
         6: [ 0, -W,  H,  0, 0, W],
         7: [ 0,  W,  H,  0, 0, 0],
         8: [ 0,  W, -H,  0, H, 0],
-      }[o] || [ W, 0, 0, H, 0, 0 ];
+      }[o];
 
       const swap = (o >= 5);
       return {
         pageW: swap ? H : W,
         pageH: swap ? W : H,
-        cm: M
+        cm
       };
     }
 
