@@ -229,7 +229,7 @@
       </h1>
     </header>
 
-    <input type="file" id="fileInput" class="visually-hidden" accept="image/jpeg,image/jpg" multiple>
+    <input type="file" id="fileInput" class="visually-hidden" accept="image/jpeg,.jpg,.jpeg" multiple>
     <label class="dropzone" id="dropzone" for="fileInput">
       <span class="dropzone-icon">📄</span>
       <span class="dropzone-title">JPGファイルをドラッグ＆ドロップ</span>
@@ -248,10 +248,9 @@
   <script>
     // --- 1. JPEG エラークラスとファイル種別スニッフィング ---
     class JpegError extends Error {
-      constructor(code, message, detail) {
+      constructor(code, message) {
         super(message);
         this.code = code;
-        this.detail = detail;
       }
     }
 
@@ -411,7 +410,9 @@
         if (tail.length < 2 || tail[0] !== 0xFF || tail[1] !== 0xD9) {
           info.warnings.push({ code: 'NO_EOI', message: 'ファイルの末尾マーカー(EOI)が確認できませんでした（ファイル末尾が欠損している可能性があります）' });
         }
-      } catch (e) {}
+      } catch (e) {
+        info.warnings.push({ code: 'EOI_CHECK_FAILED', message: `ファイル末尾マーカー(EOI)の確認に失敗しました（${e.name}: ${e.message}）` });
+      }
 
       return info;
     }
@@ -476,8 +477,8 @@
     });
 
     // --- 4. 300 DPI PDF 生成 ---
-    function buildPdf(file, info) {
-      const { pageW, pageH, cm } = layout(info);
+    function buildPdf(file, info, page = layout(info)) {
+      const { pageW, pageH, cm } = page;
       const cs = { 1: '/DeviceGray', 3: '/DeviceRGB', 4: '/DeviceCMYK' }[info.components];
       const decode = (info.components === 4 && info.adobe) ? ' /Decode [1 0 1 0 1 0 1 0]' : '';
       const content = `q ${cm.map(fmt).join(' ')} cm /Im0 Do Q`;
@@ -524,9 +525,14 @@
     // click ハンドラは持たない（持つとピッカーが 2 回開くおそれがある）
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
       dropzone.classList.add('dragover');
     });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('dragleave', (e) => {
+      // 子要素へ移っただけのときは解除しない（ちらつき防止）
+      if (e.relatedTarget && dropzone.contains(e.relatedTarget)) return;
+      dropzone.classList.remove('dragover');
+    });
     dropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropzone.classList.remove('dragover');
@@ -590,7 +596,8 @@
           const info = await parseJpeg(file);
 
           // 2. 300 DPI PDF 生成 (ゼロコピー)
-          const pdfBlob = buildPdf(file, info);
+          const page = layout(info);
+          const pdfBlob = buildPdf(file, info, page);
 
           // 3. ダウンロードリンクを生成（カードに常設し、これ自身を click して自動 DL）
           const url = URL.createObjectURL(pdfBlob);
@@ -603,7 +610,7 @@
           link.textContent = '⬇ ダウンロード';
 
           // 4. UI 表示更新
-          const { pageW, pageH } = layout(info);
+          const { pageW, pageH } = page;
           const ptW = fmt(pageW);
           const ptH = fmt(pageH);
           const mmW = (pageW * 25.4 / 300).toFixed(1);
