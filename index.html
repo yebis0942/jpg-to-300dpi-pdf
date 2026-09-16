@@ -505,23 +505,40 @@
     });
 
     clearBtn.addEventListener('click', () => {
-      resultList.innerHTML = '';
+      resultList.replaceChildren();
       resultsSection.style.display = 'none';
     });
+
+    // 解析中カードの骨組みを組み立てる（HTML 文字列は組み立てず createElement のみ）
+    function createCard(name) {
+      const card = document.createElement('li');
+      card.className = 'result-card';
+
+      const icon = document.createElement('div');
+      icon.className = 'status-icon';
+      icon.textContent = '⏳';
+
+      const body = document.createElement('div');
+      body.className = 'card-body';
+
+      const title = document.createElement('div');
+      title.className = 'card-title';
+      title.textContent = name;
+
+      const meta = document.createElement('div');
+      meta.className = 'card-meta';
+      meta.textContent = '解析中...';
+
+      body.append(title, meta);
+      card.append(icon, body);
+      return { card, icon, body, meta };
+    }
 
     async function processFiles(files) {
       resultsSection.style.display = 'block';
 
       for (const file of files) {
-        const card = document.createElement('li');
-        card.className = 'result-card';
-        card.innerHTML = `
-          <div class="status-icon">⏳</div>
-          <div class="card-body">
-            <div class="card-title">${escapeHtml(file.name)}</div>
-            <div class="card-meta">解析中...</div>
-          </div>
-        `;
+        const { card, icon, body, meta } = createCard(file.name);
         resultList.insertBefore(card, resultList.firstChild);
 
         try {
@@ -551,33 +568,28 @@
           const hasWarn = info.warnings.length > 0;
 
           card.className = `result-card ${hasWarn ? 'warning' : 'success'}`;
-          card.querySelector('.status-icon').textContent = hasWarn ? '⚠️' : '✓';
-          card.querySelector('.card-meta').textContent = 
+          icon.textContent = hasWarn ? '⚠️' : '✓';
+          meta.textContent =
             `${info.width}×${info.height}px → ${ptW}×${ptH}pt (${mmW}×${mmH}mm) | 300 DPI | ${(pdfBlob.size / 1024).toFixed(1)} KB`;
 
-          if (hasWarn) {
-            const warnMsg = info.warnings.map(w => w.message).join('<br>');
+          // 警告は 1 件につき 1 要素。innerHTML を使わず textContent で描画する
+          for (const w of info.warnings) {
             const msgEl = document.createElement('div');
             msgEl.className = 'card-message';
-            msgEl.innerHTML = warnMsg;
-            card.querySelector('.card-body').appendChild(msgEl);
+            msgEl.dataset.warnCode = w.code;
+            msgEl.textContent = w.message;
+            body.appendChild(msgEl);
           }
         } catch (err) {
           card.className = 'result-card error';
-          card.querySelector('.status-icon').textContent = '✕';
-          card.querySelector('.card-meta').textContent = '変換エラー';
+          icon.textContent = '✕';
+          meta.textContent = '変換エラー';
           const msgEl = document.createElement('div');
           msgEl.className = 'card-message';
           msgEl.textContent = err.message || '変換に失敗しました';
-          card.querySelector('.card-body').appendChild(msgEl);
+          body.appendChild(msgEl);
         }
       }
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-      );
     }
   </script>
 </body>
