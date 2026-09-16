@@ -521,6 +521,19 @@
     const resultList = document.getElementById('resultList');
     const clearBtn = document.getElementById('clearBtn');
 
+    // 要素を 1 つの式で組み立てる。HTML 文字列を経由しないので、ファイル名や
+    // 警告文がそのままタグとして解釈される余地がない。
+    // dataset は DOMStringMap で再代入できないため props とは別に受ける
+    function el(tag, { cls, text, data, ...props } = {}, children) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text != null) node.textContent = text;
+      if (data) Object.assign(node.dataset, data);
+      Object.assign(node, props); // href / download など DOM プロパティ
+      if (children) node.append(...children);
+      return node;
+    }
+
     // 「1 カード = 1 Object URL」。カードの生存期間と URL の生存期間を一致させる
     const liveObjectUrls = [];
 
@@ -562,28 +575,13 @@
       resultsSection.style.display = 'none';
     });
 
-    // 解析中カードの骨組みを組み立てる（HTML 文字列は組み立てず createElement のみ）
+    // 解析中カードの骨組みを組み立てる
     function createCard(name) {
-      const card = document.createElement('li');
-      card.className = 'result-card';
-
-      const icon = document.createElement('div');
-      icon.className = 'status-icon';
-      icon.textContent = '⏳';
-
-      const body = document.createElement('div');
-      body.className = 'card-body';
-
-      const title = document.createElement('div');
-      title.className = 'card-title';
-      title.textContent = name;
-
-      const meta = document.createElement('div');
-      meta.className = 'card-meta';
-      meta.textContent = '解析中...';
-
-      body.append(title, meta);
-      card.append(icon, body);
+      const icon = el('div', { cls: 'status-icon', text: '⏳' });
+      const title = el('div', { cls: 'card-title', text: name });
+      const meta = el('div', { cls: 'card-meta', text: '解析中...' });
+      const body = el('div', { cls: 'card-body' }, [title, meta]);
+      const card = el('li', { cls: 'result-card' }, [icon, body]);
       return { card, icon, body, meta };
     }
 
@@ -605,12 +603,13 @@
           // 3. ダウンロードリンクを生成（カードに常設し、これ自身を click して自動 DL）
           const url = URL.createObjectURL(pdfBlob);
           liveObjectUrls.push(url);
-          const link = document.createElement('a');
-          link.className = 'card-download';
-          link.href = url;
           // download は DOM プロパティなのでファイル名のエスケープは不要
-          link.download = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
-          link.textContent = '⬇ ダウンロード';
+          const link = el('a', {
+            cls: 'card-download',
+            text: '⬇ ダウンロード',
+            href: url,
+            download: file.name.replace(/\.[^/.]+$/, '') + '.pdf',
+          });
 
           // 4. UI 表示更新
           const { pageW, pageH } = page;
@@ -627,11 +626,7 @@
 
           // 警告は 1 件につき 1 要素。DL リンクより前に置き、リンクを常にカード末尾にする
           for (const w of info.warnings) {
-            const msgEl = document.createElement('div');
-            msgEl.className = 'card-message';
-            msgEl.dataset.warnCode = w.code;
-            msgEl.textContent = w.message;
-            body.appendChild(msgEl);
+            body.append(el('div', { cls: 'card-message', text: w.message, data: { warnCode: w.code } }));
           }
 
           body.appendChild(link);
@@ -642,10 +637,7 @@
           card.className = 'result-card error';
           icon.textContent = '✕';
           meta.textContent = '変換エラー';
-          const msgEl = document.createElement('div');
-          msgEl.className = 'card-message';
-          msgEl.textContent = err.message || '変換に失敗しました';
-          body.appendChild(msgEl);
+          body.append(el('div', { cls: 'card-message', text: err.message || '変換に失敗しました' }));
         }
       }
     }
