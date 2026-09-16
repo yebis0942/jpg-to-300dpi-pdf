@@ -575,13 +575,28 @@
       resultsSection.style.display = 'none';
     });
 
+    // カードの見た目はクラスとアイコンの組で決まる。対になるものを離して
+    // 書くとどちらかだけ直す事故が起きるので、1 つの表にまとめる
+    const STATUS = {
+      pending: { cls: 'result-card', icon: '⏳' },
+      success: { cls: 'result-card success', icon: '✓' },
+      warning: { cls: 'result-card warning', icon: '⚠️' },
+      error: { cls: 'result-card error', icon: '✕' },
+    };
+
+    function setStatus(card, icon, kind) {
+      card.className = STATUS[kind].cls;
+      icon.textContent = STATUS[kind].icon;
+    }
+
     // 解析中カードの骨組みを組み立てる
     function createCard(name) {
-      const icon = el('div', { cls: 'status-icon', text: '⏳' });
+      const icon = el('div', { cls: 'status-icon' });
       const title = el('div', { cls: 'card-title', text: name });
       const meta = el('div', { cls: 'card-meta', text: '解析中...' });
       const body = el('div', { cls: 'card-body' }, [title, meta]);
-      const card = el('li', { cls: 'result-card' }, [icon, body]);
+      const card = el('li', {}, [icon, body]);
+      setStatus(card, icon, 'pending');
       return { card, icon, body, meta };
     }
 
@@ -619,8 +634,7 @@
           const mmH = (pageH * 25.4 / 300).toFixed(1);
           const hasWarn = info.warnings.length > 0;
 
-          card.className = `result-card ${hasWarn ? 'warning' : 'success'}`;
-          icon.textContent = hasWarn ? '⚠️' : '✓';
+          setStatus(card, icon, hasWarn ? 'warning' : 'success');
           meta.textContent =
             `${info.width}×${info.height}px → ${ptW}×${ptH}pt (${mmW}×${mmH}mm) | 300 DPI | ${(pdfBlob.size / 1024).toFixed(1)} KB`;
 
@@ -634,8 +648,7 @@
           // 5. ダウンロード発火。ブラウザにブロックされてもリンクはカードに残る
           link.click();
         } catch (err) {
-          card.className = 'result-card error';
-          icon.textContent = '✕';
+          setStatus(card, icon, 'error');
           meta.textContent = '変換エラー';
           body.append(el('div', { cls: 'card-message', text: err.message || '変換に失敗しました' }));
         }
