@@ -1,0 +1,8 @@
+{
+  "name": "jpg-to-300dpi-pdf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
