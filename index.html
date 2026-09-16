@@ -278,6 +278,7 @@
 
       let pos = 2;
       let exifSeen = false;
+      let iccSeen = false;
 
       for (;;) {
         await ensure(pos + 4);
@@ -358,6 +359,12 @@
           await ensure(segStart + 5);
           if (ascii(buf, segStart, 5) === 'Adobe') {
             info.adobe = true;
+          }
+        } else if (m === 0xE2 && !iccSeen && len >= 14) { // APP2 (ICC)。識別子 12 バイト + 分割番号 2 バイト
+          await ensure(segStart + 12);
+          if (ascii(buf, segStart, 12) === 'ICC_PROFILE\0') {
+            iccSeen = true; // 分割チャンクでの重複警告を防ぐ
+            info.warnings.push({ code: 'ICC_LOST', message: 'ICC プロファイルが埋め込まれていますが PDF には引き継がれません（色味が変わって見える場合があります）' });
           }
         }
 
