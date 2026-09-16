@@ -38,6 +38,7 @@
     }
 
     .container {
+      position: relative;
       max-width: 680px;
       margin: 0 auto;
       background: var(--bg);
@@ -57,7 +58,18 @@
       color: var(--text);
     }
 
+    /* input を視覚的にだけ隠す。display: none と違いタブ順に残り、Enter / Space でピッカーが開く */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
     .dropzone {
+      display: block; /* label は既定 inline のため padding / text-align が効かない */
       border: 2px dashed var(--border);
       border-radius: var(--radius);
       padding: 48px 24px;
@@ -72,6 +84,12 @@
       background: var(--primary-subtle);
     }
 
+    #fileInput:focus-visible + .dropzone {
+      border-color: var(--primary);
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
     .dropzone-icon {
       font-size: 40px;
       margin-bottom: 12px;
@@ -79,6 +97,7 @@
     }
 
     .dropzone-title {
+      display: block;
       font-size: 16px;
       font-weight: 600;
       color: var(--text);
@@ -86,6 +105,7 @@
     }
 
     .dropzone-subtitle {
+      display: block;
       font-size: 13px;
       color: var(--text-subtle);
     }
@@ -209,19 +229,19 @@
       </h1>
     </header>
 
-    <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" class="visually-hidden" accept="image/jpeg,image/jpg" multiple>
+    <label class="dropzone" id="dropzone" for="fileInput">
       <span class="dropzone-icon">📄</span>
-      <div class="dropzone-title">JPGファイルをドラッグ＆ドロップ</div>
-      <div class="dropzone-subtitle">またはクリックしてファイルを選択（複数ファイル対応）</div>
-      <input type="file" id="fileInput" accept="image/jpeg,image/jpg" multiple style="display: none;">
-    </div>
+      <span class="dropzone-title">JPGファイルをドラッグ＆ドロップ</span>
+      <span class="dropzone-subtitle">またはクリックしてファイルを選択（複数ファイル対応）</span>
+    </label>
 
     <div class="results" id="resultsSection" style="display: none;">
       <div class="results-header">
         <span>処理結果</span>
         <button class="clear-btn" id="clearBtn">ログをクリア</button>
       </div>
-      <ul class="result-list" id="resultList"></ul>
+      <ul class="result-list" id="resultList" aria-live="polite" aria-relevant="additions text"></ul>
     </div>
   </div>
 
@@ -500,7 +520,8 @@
     // 「1 カード = 1 Object URL」。カードの生存期間と URL の生存期間を一致させる
     const liveObjectUrls = [];
 
-    dropzone.addEventListener('click', () => fileInput.click());
+    // dropzone は <label for="fileInput">。ピッカーはネイティブ委譲で開くので
+    // click ハンドラは持たない（持つとピッカーが 2 回開くおそれがある）
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropzone.classList.add('dragover');
