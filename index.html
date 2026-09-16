@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JPG → 300 DPI PDF 変換</title>
+  <style>
+    :root {
+      --primary: #0969da;
+      --primary-hover: #0550ae;
+      --primary-subtle: #ddf4ff;
+      --border: #d0d7de;
+      --bg: #ffffff;
+      --surface: #f6f8fa;
+      --text: #1f2328;
+      --text-subtle: #656d76;
+      --success: #1a7f37;
+      --success-subtle: #dafbe1;
+      --warning: #9a6700;
+      --warning-subtle: #fff8c5;
+      --danger: #cf222e;
+      --danger-subtle: #ffebe9;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      background-color: var(--surface);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    }
+
+    header {
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      background: var(--surface);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: var(--primary-subtle);
+    }
+
+    .dropzone-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .dropzone-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .dropzone-subtitle {
+      font-size: 13px;
+      color: var(--text-subtle);
+    }
+
+    .results {
+      margin-top: 24px;
+    }
+
+    .results-header {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .result-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .result-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #ffffff;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-card.success {
+      border-left: 4px solid var(--success);
+    }
+
+    .result-card.warning {
+      border-left: 4px solid var(--warning);
+      background: var(--warning-subtle);
+    }
+
+    .result-card.error {
+      border-left: 4px solid var(--danger);
+      background: var(--danger-subtle);
+    }
+
+    .status-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .card-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-title {
+      font-weight: 600;
+      word-break: break-all;
+      margin-bottom: 2px;
+    }
+
+    .card-meta {
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-subtle);
+    }
+
+    .card-message {
+      margin-top: 4px;
+      font-size: 12px;
+    }
+
+    .result-card.warning .card-message {
+      color: var(--warning);
+    }
+
+    .result-card.error .card-message {
+      color: var(--danger);
+    }
+
+    .clear-btn {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: var(--primary);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        JPGファイルを300 DPIにしてPDFに変換
+      </h1>
+    </header>
+
+    <div class="dropzone" id="dropzone">
+      <span class="dropzone-icon">📄</span>
+      <div class="dropzone-title">JPGファイルをドラッグ＆ドロップ</div>
+      <div class="dropzone-subtitle">またはクリックしてファイルを選択（複数ファイル対応）</div>
+      <input type="file" id="fileInput" accept="image/jpeg,image/jpg" multiple style="display: none;">
+    </div>
+
+    <div class="results" id="resultsSection" style="display: none;">
+      <div class="results-header">
+        <span>処理結果</span>
+        <button class="clear-btn" id="clearBtn">ログをクリア</button>
+      </div>
+      <ul class="result-list" id="resultList"></ul>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. JPEG エラークラスとファイル種別スニッフィング ---
+    class JpegError extends Error {
+      constructor(code, message, detail) {
+        super(message);
+        this.code = code;
+        this.detail = detail;
+      }
+    }
+
+    const ascii = (b, o, n) => String.fromCharCode(...b.subarray(o, o + n));
+
+    function sniff(b) {
+      if (!b || b.length < 4) return null;
+      const s = (o, str) => ascii(b, o, str.length) === str;
+      if (b[0] === 0x89 && s(1, 'PNG')) return 'PNG 画像';
+      if (s(0, 'RIFF') && s(8, 'WEBP')) return 'WebP 画像';
+      if (s(4, 'ftyp')) {
+        const brand = ascii(b, 8, 4);
+        if (/^(heic|heix|hevc|mif1|msf1)/i.test(brand)) return 'HEIC/HEIF 画像 (iPhone撮影写真)';
+        if (/^avi[fs]/i.test(brand)) return 'AVIF 画像';
+        return 'ISO-BMFF 動画/画像';
+      }
+      if (s(0, 'GIF8')) return 'GIF 画像';
+      if (s(0, '%PDF')) return 'PDF ドキュメント';
+      if (b[0] === 0xFF && b[1] === 0x0A) return 'JPEG XL 画像';
+      if (s(0, 'II*\0') || s(0, 'MM\0*')) return 'TIFF 画像';
+      if (b[0] === 0x42 && b[1] === 0x4D) return 'BMP 画像';
+      return null;
+    }
+
+    // --- 2. 低メモリ JPEG ヘッダパーサー (parseJpeg) ---
+    async function parseJpeg(file, { chunk = 64 * 1024, maxHeader = 16 * 1024 * 1024 } = {}) {
+      let buf = new Uint8Array(0);
+      let dv;
+
+      const ensure = async (end) => {
+        if (end <= buf.length) return;
+        if (end > file.size) throw new JpegError('TRUNCATED', 'ヘッダの途中でファイルが切れています');
+        if (end > maxHeader) throw new JpegError('HEADER_TOO_LARGE', 'ヘッダ部が大きすぎます');
+        const want = Math.min(file.size, Math.max(end, buf.length * 2, chunk));
+        buf = new Uint8Array(await file.slice(0, want).arrayBuffer());
+        dv = new DataView(buf.buffer);
+      };
+
+      const u16 = (o) => dv.getUint16(o); // BE
+
+      await ensure(Math.min(chunk, file.size));
+      if (file.size < 4 || buf[0] !== 0xFF || buf[1] !== 0xD8) {
+        const detected = sniff(buf);
+        const hint = detected ? `（${detected} と判定されました）` : '';
+        throw new JpegError('NOT_JPEG', `有効な JPEG ファイルではありません${hint}`);
+      }
+
+      const info = {
+        width: 0,
+        height: 0,
+        components: 0,
+        precision: 0,
+        progressive: false,
+        adobe: false,
+        orientation: 1,
+        warnings: []
+      };
+
+      let pos = 2;
+      let exifSeen = false;
+
+      for (;;) {
+        await ensure(pos + 4);
+        if (buf[pos] !== 0xFF) {
+          throw new JpegError('CORRUPT', `マーカー境界が不正です (offset: ${pos})`);
+        }
+        const m = buf[pos + 1];
+        if (m === 0xFF) { pos++; continue; } // fill byte
+        if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) {
+          pos += 2;
+          continue;
+        }
+        if (m === 0xD9 || m === 0xDA) {
+          throw new JpegError('NO_SOF', 'SOFマーカーが見つかる前に画像データが開始しました');
+        }
+
+        const len = u16(pos + 2);
+        if (len < 2) {
+          throw new JpegError('CORRUPT', `セグメント長が不正です (marker: 0x${m.toString(16)})`);
+        }
+        const segStart = pos + 4;
+        const segEnd = pos + 2 + len;
+
+        // SOF0 〜 SOF15 (SOF4, 8, 12 除く)
+        if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
+          await ensure(segStart + 6);
+          if (m >= 0xC9) throw new JpegError('UNSUPPORTED', '算術符号化 JPEG は非対応です');
+          if (m === 0xC3 || m === 0xC7) throw new JpegError('UNSUPPORTED', 'ロスレス JPEG は非対応です');
+          if (m >= 0xC5) throw new JpegError('UNSUPPORTED', '階層 JPEG は非対応です');
+
+          info.precision = buf[segStart];
+          info.height = u16(segStart + 1);
+          info.width = u16(segStart + 3);
+          info.components = buf[segStart + 5];
+          info.progressive = (m === 0xC2);
+
+          if (info.precision !== 8) {
+            throw new JpegError('UNSUPPORTED', `${info.precision}bit JPEG は非対応です（8bit のみ対応）`);
+          }
+          if (info.height === 0) {
+            throw new JpegError('UNSUPPORTED', 'DNL形式（高さ未定）の JPEG は非対応です');
+          }
+          if (![1, 3, 4].includes(info.components)) {
+            throw new JpegError('UNSUPPORTED', `${info.components}成分の JPEG は非対応です`);
+          }
+          break; // SOF取得完了、ヘッダ走査終了
+        }
+
+        // APP1 (EXIF)
+        if (m === 0xE1 && !exifSeen) {
+          await ensure(segEnd);
+          if (ascii(buf, segStart, 6) === 'Exif\0\0') {
+            exifSeen = true;
+            try {
+              info.orientation = readOrientation(dv, segStart + 6, segEnd);
+            } catch (e) {
+              info.warnings.push({ code: 'EXIF_INVALID', message: `EXIF回転情報が解析できませんでした（通常向きで処理）: ${e.message}` });
+            }
+          }
+        } else if (m === 0xEE) { // APP14 (Adobe)
+          await ensure(segStart + 5);
+          if (ascii(buf, segStart, 5) === 'Adobe') {
+            info.adobe = true;
+          }
+        }
+
+        pos = segEnd;
+      }
+
+      // 末尾 EOI (0xFF 0xD9) チェック
+      try {
+        const tail = new Uint8Array(await file.slice(Math.max(0, file.size - 2), file.size).arrayBuffer());
+        if (tail.length < 2 || tail[0] !== 0xFF || tail[1] !== 0xD9) {
+          info.warnings.push({ code: 'NO_EOI', message: 'ファイルの末尾マーカー(EOI)が確認できませんでした（ファイル末尾が欠損している可能性があります）' });
+        }
+      } catch (e) {}
+
+      return info;
+    }
+
+    // EXIF IFD0 から Orientation (0x0112) を安全に読み取る
+    function readOrientation(dv, tiff, end) {
+      if (tiff + 8 > end) throw new Error('TIFFヘッダ長不足');
+      const bo = dv.getUint16(tiff);
+      const le = (bo === 0x4949); // 'II' = Little Endian, 'MM' = Big Endian
+      if (!le && bo !== 0x4D4D) throw new Error('TIFF バイトオーダー不正');
+      if (dv.getUint16(tiff + 2, le) !== 42) throw new Error('TIFF マジックナンバー不正');
+
+      const ifdOffset = dv.getUint32(tiff + 4, le);
+      const ifd = tiff + ifdOffset;
+      if (ifd < tiff + 8 || ifd + 2 > end) throw new Error('IFD0 オフセット範囲外');
+
+      const entryCount = dv.getUint16(ifd, le);
+      if (ifd + 2 + entryCount * 12 > end) throw new Error('IFD0 エントリ数範囲外');
+
+      for (let i = 0, e = ifd + 2; i < entryCount; i++, e += 12) {
+        if (dv.getUint16(e, le) !== 0x0112) continue; // Tag: Orientation
+        const type = dv.getUint16(e + 2, le);
+        const count = dv.getUint32(e + 4, le);
+        if (type !== 3 || count !== 1) return 1; // SHORT型かつcount=1以外は無視
+        const v = dv.getUint16(e + 8, le);
+        return (v >= 1 && v <= 8) ? v : 1;
+      }
+      return 1;
+    }
+
+    // --- 3. 座標系・アフィン変換行列計算 (Orientation 1〜8) ---
+    // px * 0.24 = px * 24 / 100 で丸め誤差を防止
+    const fmt = (px) => (px * 24 / 100).toFixed(2).replace(/\.?0+$/, '') || '0';
+
+    function layout({ width: W, height: H, orientation: o }) {
+      const M = {
+        1: [ W,  0,  0,  H, 0, 0],
+        2: [-W,  0,  0,  H, W, 0],
+        3: [-W,  0,  0, -H, W, H],
+        4: [ W,  0,  0, -H, 0, H],
+        5: [ 0, -W, -H,  0, H, W],
+        6: [ 0, -W,  H,  0, 0, W],
+        7: [ 0,  W,  H,  0, 0, 0],
+        8: [ 0,  W, -H,  0, H, 0],
+      }[o] || [ W, 0, 0, H, 0, 0 ];
+
+      const swap = (o >= 5);
+      return {
+        pageW: swap ? H : W,
+        pageH: swap ? W : H,
+        cm: M
+      };
+    }
+
+    // Latin-1 文字列をバイト配列へ
+    const latin1 = (s) => Uint8Array.from(s, (c) => {
+      const code = c.charCodeAt(0);
+      if (code > 0xFF) throw new Error('PDF 構造に非 Latin-1 文字が混入しました');
+      return code;
+    });
+
+    // --- 4. 300 DPI PDF 生成 ---
+    function buildPdf(file, info) {
+      const { pageW, pageH, cm } = layout(info);
+      const cs = { 1: '/DeviceGray', 3: '/DeviceRGB', 4: '/DeviceCMYK' }[info.components];
+      const decode = (info.components === 4 && info.adobe) ? ' /Decode [1 0 1 0 1 0 1 0]' : '';
+      const content = `q ${cm.map(fmt).join(' ')} cm /Im0 Do Q`;
+
+      const objs = [
+        `<< /Type /Catalog /Pages 2 0 R >>`,
+        `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(pageW)} ${fmt(pageH)}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`,
+        `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+        `<< /Type /XObject /Subtype /Image /Width ${info.width} /Height ${info.height} /ColorSpace ${cs} /BitsPerComponent 8 /Filter /DCTDecode${decode} /Length ${file.size} >>`
+      ];
+
+      let head = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
+      const offsets = [];
+      objs.forEach((body, i) => {
+        offsets.push(head.length);
+        head += `${i + 1} 0 obj\n${body}\n`;
+        head += (i === 4) ? 'stream\n' : 'endobj\n'; // 5番（画像XObject）だけ stream で止める
+      });
+
+      const part1 = latin1(head);
+      let tail = '\nendstream\nendobj\n';
+      const xrefPos = part1.length + file.size + tail.length;
+
+      // xref の各エントリは厳密に 20 バイト ("0000000000 65535 f \n")
+      tail += 'xref\n0 6\n0000000000 65535 f \n'
+            + offsets.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')
+            + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+
+      return new Blob([part1, file, latin1(tail)], { type: 'application/pdf' });
+    }
+
+    // --- 5. UI イベント制御 ---
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultList = document.getElementById('resultList');
+    const clearBtn = document.getElementById('clearBtn');
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        processFiles(Array.from(e.dataTransfer.files));
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) {
+        processFiles(Array.from(e.target.files));
+        fileInput.value = ''; // リセット
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      resultList.innerHTML = '';
+      resultsSection.style.display = 'none';
+    });
+
+    async function processFiles(files) {
+      resultsSection.style.display = 'block';
+
+      for (const file of files) {
+        const card = document.createElement('li');
+        card.className = 'result-card';
+        card.innerHTML = `
+          <div class="status-icon">⏳</div>
+          <div class="card-body">
+            <div class="card-title">${escapeHtml(file.name)}</div>
+            <div class="card-meta">解析中...</div>
+          </div>
+        `;
+        resultList.insertBefore(card, resultList.firstChild);
+
+        try {
+          // 1. JPEG ヘッダ解析
+          const info = await parseJpeg(file);
+
+          // 2. 300 DPI PDF 生成 (ゼロコピー)
+          const pdfBlob = buildPdf(file, info);
+
+          // 3. ダウンロード発火
+          const url = URL.createObjectURL(pdfBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          const outName = file.name.replace(/\.[^/.]+$/, '') + '.pdf';
+          a.download = outName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+          // 4. UI 表示更新
+          const { pageW, pageH } = layout(info);
+          const ptW = fmt(pageW);
+          const ptH = fmt(pageH);
+          const mmW = (pageW * 25.4 / 300).toFixed(1);
+          const mmH = (pageH * 25.4 / 300).toFixed(1);
+          const hasWarn = info.warnings.length > 0;
+
+          card.className = `result-card ${hasWarn ? 'warning' : 'success'}`;
+          card.querySelector('.status-icon').textContent = hasWarn ? '⚠️' : '✓';
+          card.querySelector('.card-meta').textContent = 
+            `${info.width}×${info.height}px → ${ptW}×${ptH}pt (${mmW}×${mmH}mm) | 300 DPI | ${(pdfBlob.size / 1024).toFixed(1)} KB`;
+
+          if (hasWarn) {
+            const warnMsg = info.warnings.map(w => w.message).join('<br>');
+            const msgEl = document.createElement('div');
+            msgEl.className = 'card-message';
+            msgEl.innerHTML = warnMsg;
+            card.querySelector('.card-body').appendChild(msgEl);
+          }
+        } catch (err) {
+          card.className = 'result-card error';
+          card.querySelector('.status-icon').textContent = '✕';
+          card.querySelector('.card-meta').textContent = '変換エラー';
+          const msgEl = document.createElement('div');
+          msgEl.className = 'card-message';
+          msgEl.textContent = err.message || '変換に失敗しました';
+          card.querySelector('.card-body').appendChild(msgEl);
+        }
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
